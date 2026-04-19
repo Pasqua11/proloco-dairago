@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  operator
+  prenotazioni
+  tavoli
+}
+
+model User {
+  id           Int        @id @default(autoincrement())
+  username     String     @unique
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  role         Role       @default(operator)
+  isActive     Boolean    @default(true) @map("is_active")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  auditLogs    AuditLog[]
+
+  @@map("users")
+}
+
+model Date {
+  id       Int       @id @default(autoincrement())
+  date     DateTime  @unique @db.Date
+  label    String?
+  isActive Boolean   @default(true) @map("is_active")
+  sessions Session[]
+
+  @@map("dates")
+}
+
+model Session {
+  id          Int          @id @default(autoincrement())
+  dateId      Int          @map("date_id")
+  name        String
+  startTime   String       @map("start_time")
+  endTime     String?      @map("end_time")
+  maxCapacity Int?         @map("max_capacity")
+  isActive    Boolean      @default(true) @map("is_active")
+  date        Date         @relation(fields: [dateId], references: [id], onDelete: Cascade)
+  groups      Group[]
+
+  @@map("sessions")
+}
+
+model Group {
+  id          Int          @id @default(autoincrement())
+  sessionId   Int          @map("session_id")
+  name        String
+  size        Int
+  notes       String?
+  contactName String?      @map("contact_name")
+  contactPhone String?     @map("contact_phone")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  session     Session      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  assignments Assignment[]
+
+  @@map("groups")
+}
+
+model Assignment {
+  id          Int      @id @default(autoincrement())
+  groupId     Int      @map("group_id")
+  tableNumber Int      @map("table_number")
+  seats       Int
+  notes       String?
+  assignedAt  DateTime @default(now()) @map("assigned_at")
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@map("assignments")
+}
+
+model MenuItem {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  category    String
+  price       Decimal? @db.Decimal(8, 2)
+  isAvailable Boolean  @default(true) @map("is_available")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("menu_items")
+}
+
+model AppState {
+  id        Int      @id @default(1)
+  data      Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_state")
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  userId     Int?     @map("user_id")
+  action     String
+  tableName  String   @map("table_name")
+  recordId   Int?     @map("record_id")
+  oldValues  Json?    @map("old_values")
+  newValues  Json?    @map("new_values")
+  ipAddress  String?  @map("ip_address")
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("audit_log")
+}

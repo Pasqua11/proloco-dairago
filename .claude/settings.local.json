@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npx prisma *)",
+      "Bash(npm run *)",
+      "Bash(echo \"Backend PID: $!\")",
+      "Bash(echo \"Frontend PID: $!\")",
+      "Bash(pkill -f \"node src/server.js\")",
+      "Bash(pkill -f \"vite\")",
+      "Bash(node src/server.js)",
+      "Bash(curl -s http://localhost:3001/api/health)",
+      "Bash(curl *)",
+      "Bash(node -e ' *)",
+      "Bash(taskkill /F /IM node.exe)",
+      "Bash(taskkill *)",
+      "Bash(python -m json.tool)"
+    ]
+  }
+}
