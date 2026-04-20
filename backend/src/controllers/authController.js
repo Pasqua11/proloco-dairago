@@ -73,4 +73,16 @@ async function changePassword(req, res, next) {
   }
 }
 
-module.exports = { login, me, changePassword };
+async function verifyPin(req, res, next) {
+  try {
+    const { pin } = req.body;
+    if (!pin) return res.status(400).json({ error: 'PIN obbligatorio' });
+    if (pin === process.env.ADMIN_PIN) {
+      res.json({ valid: true });
+    } else {
+      res.status(401).json({ valid: false, error: 'PIN non valido' });
+    }
+  } catch (err) { next(err); }
+}
+
+module.exports = { login, me, changePassword, verifyPin };

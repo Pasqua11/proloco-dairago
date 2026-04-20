@@ -84,24 +84,24 @@ export default function GestioneTavoliSagra() {
   const [cercaLayout, setCercaLayout] = useState('');
   const [modalAdmin, setModalAdmin] = useState(null); // { pendingAction: fn, errore: string, input: string }
 
-  // Password admin (⚠️ protezione lato client: tiene lontani i curiosi, non i malintenzionati)
-  const ADMIN_PASSWORD = '1274';
-
   // Gate delle azioni admin: se già sbloccato → esegue; altrimenti apre popup password
   const richiediAdmin = (azione) => {
     if (adminUnlocked) { azione(); return; }
     setModalAdmin({ pendingAction: azione, errore: '', input: '' });
   };
 
-  const confermaAdmin = () => {
+  const confermaAdmin = async () => {
     if (!modalAdmin) return;
-    if (modalAdmin.input === ADMIN_PASSWORD) {
-      setAdminUnlocked(true);
-      const azione = modalAdmin.pendingAction;
-      setModalAdmin(null);
-      if (azione) azione();
-    } else {
-      setModalAdmin({ ...modalAdmin, errore: 'Password errata', input: '' });
+    try {
+      const res = await api.post('/auth/verify-pin', { pin: modalAdmin.input });
+      if (res.data.valid) {
+        setAdminUnlocked(true);
+        const azione = modalAdmin.pendingAction;
+        setModalAdmin(null);
+        if (azione) azione();
+      }
+    } catch {
+      setModalAdmin({ ...modalAdmin, errore: 'PIN non valido', input: '' });
     }
   };
 
