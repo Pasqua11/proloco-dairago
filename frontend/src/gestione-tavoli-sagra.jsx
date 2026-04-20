@@ -56,13 +56,23 @@ export default function GestioneTavoliSagra() {
     }).catch(() => {}).finally(() => setApiLoaded(true));
   }, []);
 
+  const [statoSalvataggio, setStatoSalvataggio] = useState(null); // null | 'saving' | 'saved' | 'error'
+
   // Salva stato sul server con debounce 1s
   const saveTimer = useRef(null);
+  const savedTimer = useRef(null);
   useEffect(() => {
     if (!apiLoaded) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
+    setStatoSalvataggio('saving');
     saveTimer.current = setTimeout(() => {
-      api.put('/state', { date, fasceAttivePerData, sessioni, sessioneAttiva }).catch(() => {});
+      api.put('/state', { date, fasceAttivePerData, sessioni, sessioneAttiva })
+        .then(() => {
+          setStatoSalvataggio('saved');
+          if (savedTimer.current) clearTimeout(savedTimer.current);
+          savedTimer.current = setTimeout(() => setStatoSalvataggio(null), 2000);
+        })
+        .catch(() => setStatoSalvataggio('error'));
     }, 1000);
     return () => clearTimeout(saveTimer.current);
   }, [date, fasceAttivePerData, sessioni, sessioneAttiva, apiLoaded]);
@@ -82,11 +92,20 @@ export default function GestioneTavoliSagra() {
   const [adminUnlocked, setAdminUnlocked] = useState(false);
   const [cercaGruppo, setCercaGruppo] = useState('');
   const [cercaLayout, setCercaLayout] = useState('');
+  const [ordinamento, setOrdinamento] = useState({ colonna: null, direzione: 'asc' });
+
+  const toggleOrdinamento = (colonna) => {
+    setOrdinamento(prev =>
+      prev.colonna === colonna
+        ? { colonna, direzione: prev.direzione === 'asc' ? 'desc' : 'asc' }
+        : { colonna, direzione: 'asc' }
+    );
+  };
   const [modalAdmin, setModalAdmin] = useState(null); // { pendingAction: fn, errore: string, input: string }
 
-  // Gate delle azioni admin: se già sbloccato → esegue; altrimenti apre popup password
+  // Gate delle azioni admin: admin e tavoli eseguono direttamente, altri inseriscono PIN
   const richiediAdmin = (azione) => {
-    if (adminUnlocked) { azione(); return; }
+    if (adminUnlocked || user?.role === 'admin' || user?.role === 'tavoli') { azione(); return; }
     setModalAdmin({ pendingAction: azione, errore: '', input: '' });
   };
 
@@ -968,6 +987,28 @@ export default function GestioneTavoliSagra() {
           </h1>
           <p className="text-amber-700 italic">Gestione Tavoli e Prenotazioni</p>
           <p className="text-amber-600 text-xs mt-1">Creato da Trentarossi Luca</p>
+          {/* Indicatore salvataggio */}
+          {statoSalvataggio && (
+            <div className="absolute top-0 left-0">
+              {statoSalvataggio === 'saving' && (
+                <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded-full flex items-center gap-1">
+                  <span className="animate-spin inline-block w-3 h-3 border border-amber-600 border-t-transparent rounded-full"></span>
+                  Salvataggio...
+                </span>
+              )}
+              {statoSalvataggio === 'saved' && (
+                <span className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-full flex items-center gap-1">
+                  <Check size={12} /> Salvato
+                </span>
+              )}
+              {statoSalvataggio === 'error' && (
+                <span className="text-xs text-red-700 bg-red-50 border border-red-200 px-2 py-1 rounded-full flex items-center gap-1">
+                  <X size={12} /> Errore salvataggio
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Indicatore modalità admin + utente loggato */}
           <div className="absolute top-0 right-0 flex flex-col items-end gap-1">
             {adminUnlocked ? (
@@ -1031,12 +1072,23 @@ export default function GestioneTavoliSagra() {
             </div>
           ) : (
             <div className="space-y-2">
-              {date.map(d => (
-                <div key={d} className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+              {date.map(d => {
+                const isPassata = new Date(d + 'T23:59:59') < new Date();
+                const isOggi = new Date(d + 'T00:00:00').toDateString() === new Date().toDateString();
+                return (
+                <div key={d} className={`rounded-lg p-3 border ${
+                  isOggi ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-300' :
+                  isPassata ? 'bg-gray-50 border-gray-200 opacity-60' :
+                  'bg-amber-50 border-amber-200'
+                }`}>
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2">
-                      <Calendar size={18} className="text-amber-800" />
-                      <span className="font-bold text-amber-900 capitalize">{formatDataLunga(d)}</span>
+                      <Calendar size={18} className={isPassata && !isOggi ? 'text-gray-400' : 'text-amber-800'} />
+                      <span className={`font-bold capitalize ${isPassata && !isOggi ? 'text-gray-400' : 'text-amber-900'}`}>
+                        {formatDataLunga(d)}
+                      </span>
+                      {isOggi && <span className="text-xs bg-emerald-600 text-white px-2 py-0.5 rounded-full font-semibold">OGGI</span>}
+                      {isPassata && !isOggi && <span className="text-xs bg-gray-300 text-gray-500 px-2 py-0.5 rounded-full">passata</span>}
                     </div>
                     {user?.role === 'admin' && (
                     <button
@@ -1120,7 +1172,8 @@ export default function GestioneTavoliSagra() {
                     })}
                   </div>
                 </div>
-              ))}
+              );
+              })}
             </div>
           )}
 
@@ -1312,13 +1365,24 @@ export default function GestioneTavoliSagra() {
                     <table className="w-full">
                       <thead>
                         <tr className="bg-amber-800 text-white">
-                          <th className="p-2 text-left">Cognome</th>
-                          <th className="p-2 text-center">N°</th>
-                          <th className="p-2 text-left">Telefono</th>
-                          <th className="p-2 text-left">Note</th>
-                          <th className="p-2 text-left">Piatti</th>
-                          <th className="p-2 text-center">Stato</th>
-                          <th className="p-2 text-center">Azioni</th>
+                          {[
+                            { key: 'cognome', label: 'Cognome', align: 'text-left' },
+                            { key: 'persone', label: 'N°', align: 'text-center' },
+                            { key: null, label: 'Telefono', align: 'text-left' },
+                            { key: null, label: 'Note', align: 'text-left' },
+                            { key: null, label: 'Piatti', align: 'text-left' },
+                            { key: 'stato', label: 'Stato', align: 'text-center' },
+                            { key: null, label: 'Azioni', align: 'text-center' },
+                          ].map(({ key, label, align }) => (
+                            <th key={label} className={`p-2 ${align} ${key ? 'cursor-pointer hover:bg-amber-700 select-none' : ''}`}
+                              onClick={() => key && toggleOrdinamento(key)}>
+                              {label}
+                              {key && ordinamento.colonna === key && (
+                                <span className="ml-1">{ordinamento.direzione === 'asc' ? '▲' : '▼'}</span>
+                              )}
+                              {key && ordinamento.colonna !== key && <span className="ml-1 opacity-30">⇅</span>}
+                            </th>
+                          ))}
                         </tr>
                       </thead>
                       <tbody>
@@ -1328,6 +1392,19 @@ export default function GestioneTavoliSagra() {
                           return (g.cognome || '').toLowerCase().includes(q) ||
                                  (g.telefono || '').toLowerCase().includes(q) ||
                                  (g.note || '').toLowerCase().includes(q);
+                        }).sort((a, b) => {
+                          if (!ordinamento.colonna) return 0;
+                          const dir = ordinamento.direzione === 'asc' ? 1 : -1;
+                          if (ordinamento.colonna === 'cognome')
+                            return dir * (a.cognome || '').localeCompare(b.cognome || '');
+                          if (ordinamento.colonna === 'persone')
+                            return dir * (Number(a.persone) - Number(b.persone));
+                          if (ordinamento.colonna === 'stato') {
+                            const assA = personeAssegnate(a.id);
+                            const assB = personeAssegnate(b.id);
+                            return dir * (assA / a.persone - assB / b.persone);
+                          }
+                          return 0;
                         }).map((g, idx) => {
                           const ass = personeAssegnate(g.id);
                           const completo = ass === g.persone;
