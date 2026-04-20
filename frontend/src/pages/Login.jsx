@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const LOGO_SRC = '/Logo.jpg';
+const APP_VERSION = '2026.04.20-v1';
 
 const UTENTI = [
   { username: 'admin',        label: 'Amministratore', emoji: '👑', desc: 'Accesso completo',      passwordless: false },
@@ -128,7 +129,10 @@ export default function Login() {
           </form>
         </div>
 
-        <p className="text-center text-amber-600 text-xs mt-4 italic">Creato da Trentarossi Luca</p>
+        <div className="flex justify-between text-xs text-amber-600 mt-4 italic px-1">
+          <span>Creato da Trentarossi Luca</span>
+          <span>v {APP_VERSION}</span>
+        </div>
       </div>
     </div>
   );
