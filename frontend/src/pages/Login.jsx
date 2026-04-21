@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const LOGO_SRC = '/Logo.jpg';
-const APP_VERSION = '2026.04.20-v1';
+const APP_VERSION = '2026.04.21-v1';
 
 const UTENTI = [
   { username: 'admin',        label: 'Amministratore', emoji: '👑', desc: 'Accesso completo',      passwordless: false },

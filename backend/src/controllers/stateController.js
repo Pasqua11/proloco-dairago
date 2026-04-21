@@ -8,6 +8,13 @@ async function getState(req, res, next) {
   } catch (err) { next(err); }
 }
 
+async function getVersion(req, res, next) {
+  try {
+    const record = await prisma.appState.findUnique({ where: { id: 1 }, select: { updatedAt: true } });
+    res.json({ version: record ? record.updatedAt.toISOString() : null });
+  } catch (err) { next(err); }
+}
+
 async function saveState(req, res, next) {
   try {
     const record = await prisma.appState.upsert({
@@ -15,8 +22,8 @@ async function saveState(req, res, next) {
       update: { data: req.body },
       create: { id: 1, data: req.body },
     });
-    res.json(record.data);
+    res.json({ data: record.data, version: record.updatedAt.toISOString() });
   } catch (err) { next(err); }
 }
 
-module.exports = { getState, saveState };
+module.exports = { getState, getVersion, saveState };

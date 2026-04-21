@@ -44,8 +44,14 @@ export default function GestioneTavoliSagra() {
   const [sessioneAttiva, setSessioneAttiva] = useState(null);
   const [apiLoaded, setApiLoaded] = useState(false);
   const [historyAssegnazioni, setHistoryAssegnazioni] = useState([]);
+  const [statoSalvataggio, setStatoSalvataggio] = useState(null); // null | 'saving' | 'saved' | 'error'
+  const [syncToast, setSyncToast] = useState(false);
+  const knownVersion = useRef(null);
+  const syncToastTimer = useRef(null);
+  const saveTimer = useRef(null);
+  const savedTimer = useRef(null);
 
-  // Carica stato dal server al mount
+  // Carica stato dal server al mount e acquisisce la versione iniziale
   useEffect(() => {
     api.get('/state').then(res => {
       const d = res.data;
@@ -53,21 +59,21 @@ export default function GestioneTavoliSagra() {
       if (d.fasceAttivePerData) setFasceAttivePerData(d.fasceAttivePerData);
       if (d.sessioni) setSessioni(d.sessioni);
       if (d.sessioneAttiva) setSessioneAttiva(d.sessioneAttiva);
+      return api.get('/state/version');
+    }).then(res => {
+      if (res?.data?.version) knownVersion.current = res.data.version;
     }).catch(() => {}).finally(() => setApiLoaded(true));
   }, []);
 
-  const [statoSalvataggio, setStatoSalvataggio] = useState(null); // null | 'saving' | 'saved' | 'error'
-
   // Salva stato sul server con debounce 1s
-  const saveTimer = useRef(null);
-  const savedTimer = useRef(null);
   useEffect(() => {
     if (!apiLoaded) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     setStatoSalvataggio('saving');
     saveTimer.current = setTimeout(() => {
       api.put('/state', { date, fasceAttivePerData, sessioni, sessioneAttiva })
-        .then(() => {
+        .then((res) => {
+          if (res.data.version) knownVersion.current = res.data.version;
           setStatoSalvataggio('saved');
           if (savedTimer.current) clearTimeout(savedTimer.current);
           savedTimer.current = setTimeout(() => setStatoSalvataggio(null), 2000);
@@ -76,6 +82,36 @@ export default function GestioneTavoliSagra() {
     }, 1000);
     return () => clearTimeout(saveTimer.current);
   }, [date, fasceAttivePerData, sessioni, sessioneAttiva, apiLoaded]);
+
+  // Polling real-time: ogni 5 secondi controlla se altri utenti hanno modificato lo stato
+  useEffect(() => {
+    if (!apiLoaded) return;
+    const interval = setInterval(() => {
+      if (statoSalvataggio === 'saving') return;
+      api.get('/state/version').then(res => {
+        const serverVersion = res.data.version;
+        if (!serverVersion) return;
+        if (knownVersion.current === null) {
+          knownVersion.current = serverVersion;
+          return;
+        }
+        if (serverVersion !== knownVersion.current) {
+          knownVersion.current = serverVersion;
+          api.get('/state').then(r => {
+            const d = r.data;
+            if (d.date) setDate(d.date);
+            if (d.fasceAttivePerData) setFasceAttivePerData(d.fasceAttivePerData);
+            if (d.sessioni) setSessioni(d.sessioni);
+            if (d.sessioneAttiva) setSessioneAttiva(d.sessioneAttiva);
+            setSyncToast(true);
+            if (syncToastTimer.current) clearTimeout(syncToastTimer.current);
+            syncToastTimer.current = setTimeout(() => setSyncToast(false), 3000);
+          }).catch(() => {});
+        }
+      }).catch(() => {});
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [apiLoaded, statoSalvataggio]);
 
   const [tab, setTab] = useState('gruppi');
   const [gruppoSelezionato, setGruppoSelezionato] = useState(null);
@@ -398,6 +434,7 @@ export default function GestioneTavoliSagra() {
     const list = [];
     config.fileAttive.forEach(fila => {
       const n = config.tavoliPerFila[fila];
+      if (!n || n <= 0) return;
       for (let i = 1; i <= n; i++) {
         list.push({ id: `${fila}-${i}`, fila, numero: i });
       }
@@ -669,7 +706,7 @@ export default function GestioneTavoliSagra() {
 
   // ========== CONFIG ==========
   const updateTavoliPerFila = (fila, numero) => {
-    const n = Math.max(1, Math.min(20, Number(numero) || 1));
+    const n = Math.max(0, Math.min(20, Number(numero) || 0));
     updateSessione(sessioneAttiva, {
       config: { ...config, tavoliPerFila: { ...config.tavoliPerFila, [fila]: n } }
     });
@@ -988,8 +1025,8 @@ export default function GestioneTavoliSagra() {
           <p className="text-amber-700 italic">Gestione Tavoli e Prenotazioni</p>
           <p className="text-amber-600 text-xs mt-1">Creato da Trentarossi Luca</p>
           {/* Indicatore salvataggio */}
-          {statoSalvataggio && (
-            <div className="absolute top-0 left-0">
+          {(statoSalvataggio || syncToast) && (
+            <div className="absolute top-0 left-0 flex flex-col gap-1">
               {statoSalvataggio === 'saving' && (
                 <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded-full flex items-center gap-1">
                   <span className="animate-spin inline-block w-3 h-3 border border-amber-600 border-t-transparent rounded-full"></span>
@@ -1004,6 +1041,11 @@ export default function GestioneTavoliSagra() {
               {statoSalvataggio === 'error' && (
                 <span className="text-xs text-red-700 bg-red-50 border border-red-200 px-2 py-1 rounded-full flex items-center gap-1">
                   <X size={12} /> Errore salvataggio
+                </span>
+              )}
+              {syncToast && (
+                <span className="text-xs text-sky-700 bg-sky-50 border border-sky-200 px-2 py-1 rounded-full flex items-center gap-1">
+                  <RotateCcw size={12} /> Aggiornato da un altro utente
                 </span>
               )}
             </div>
